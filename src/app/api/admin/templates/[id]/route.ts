@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { adminGuard, priceToCents } from '@/lib/admin';
 import { deletePreview, deleteTemplateFile, savePreview, saveTemplateFile } from '@/lib/storage';
-import { parsePreviews, slugify } from '@/lib/format';
+import { parsePreviews, parseColors, slugify } from '@/lib/format';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -55,11 +55,27 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     fileSize = file.size;
   }
 
-  let colors = template.colors;
-  try {
-    const parsed = JSON.parse(String(form.get('colors') ?? ''));
-    if (Array.isArray(parsed)) colors = JSON.stringify(parsed);
-  } catch { /* keep existing */ }
+  // Merge incoming color options with existing filePaths for colors that didn't get a new file.
+  let colorOptions = parseColors(String(form.get('colors') ?? ''));
+  if (colorOptions.length === 0) {
+    colorOptions = parseColors(template.colors);
+  } else {
+    const existing = parseColors(template.colors);
+    for (let i = 0; i < colorOptions.length; i++) {
+      const cf = form.get(`color_file_${i}`);
+      if (cf instanceof File && cf.size > 0) {
+        const stored = await saveTemplateFile(cf);
+        colorOptions[i] = { ...colorOptions[i], filePath: stored, fileName: cf.name };
+      } else {
+        // Preserve existing filePath by matching on name.
+        const match = existing.find((e) => e.name === colorOptions[i].name);
+        if (match?.filePath) {
+          colorOptions[i] = { ...colorOptions[i], filePath: match.filePath, fileName: match.fileName };
+        }
+      }
+    }
+  }
+  const colors = JSON.stringify(colorOptions);
 
   await prisma.template.update({
     where: { id: template.id },

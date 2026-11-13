@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-export type ColorOption = { name: string; hex: string };
+export type ColorOption = { name: string; hex: string; hex2?: string; filePath?: string; fileName?: string };
 
 export type TemplateFormValues = {
   id?: string;
@@ -67,7 +67,9 @@ export default function TemplateForm({
   const [keptPreviews, setKeptPreviews] = useState<string[]>(initial?.previews ?? []);
   const [newPreviews, setNewPreviews] = useState<File[]>([]);
   const [newFile, setNewFile] = useState<File | null>(null);
-  const [newColor, setNewColor] = useState({ name: '', hex: '#000000' });
+  const [colorFiles, setColorFiles] = useState<Record<number, File>>({});
+  const [newColor, setNewColor] = useState({ name: '', hex: '#B4A4D4', hex2: '', useHex2: false });
+  const newColorFileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -79,8 +81,8 @@ export default function TemplateForm({
     e.preventDefault();
     setError('');
 
-    if (!isEdit && !newFile) {
-      setError('Attach the file buyers will download.');
+    if (!isEdit && !newFile && Object.keys(colorFiles).length === 0) {
+      setError('Attach the file buyers will download — either one main file or a file per colour.');
       return;
     }
 
@@ -98,6 +100,9 @@ export default function TemplateForm({
     body.set('featured', values.featured ? '1' : '0');
     body.set('sortOrder', String(values.sortOrder));
     body.set('colors', JSON.stringify(values.colors));
+    values.colors.forEach((_, i) => {
+      if (colorFiles[i]) body.append(`color_file_${i}`, colorFiles[i]);
+    });
     body.set('keptPreviews', JSON.stringify(keptPreviews));
     newPreviews.forEach((file) => body.append('previews', file));
     if (newFile) body.set('file', newFile);
@@ -269,62 +274,130 @@ export default function TemplateForm({
 
         <div className="card space-y-4 p-6">
           <h2 className="font-display text-2xl text-cocoa">Colour options</h2>
-          <p className="text-sm text-brown">Add any colours this template comes in. Buyers pick one when ordering.</p>
+          <p className="text-sm text-brown">Each colour gets its own file. Buyers pick a colour and download it.</p>
 
           {values.colors.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
+            <div className="space-y-3">
               {values.colors.map((c, i) => (
-                <div key={i} className="flex items-center gap-1.5 rounded-full border border-sand bg-sand-pale/60 pl-1 pr-3 py-1">
-                  <span className="h-5 w-5 rounded-full border border-sand/60 shadow-sm" style={{ background: c.hex }} />
-                  <span className="text-xs text-cocoa">{c.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => set('colors', values.colors.filter((_, j) => j !== i))}
-                    className="ml-0.5 text-[10px] text-brown hover:text-wine"
-                    aria-label="Remove"
-                  >✕</button>
+                <div key={i} className="rounded-xl border border-sand p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="h-7 w-7 flex-shrink-0 rounded-full border border-sand/60 shadow-sm"
+                      style={{
+                        background: c.hex2
+                          ? `linear-gradient(135deg, ${c.hex} 50%, ${c.hex2} 50%)`
+                          : c.hex,
+                      }}
+                    />
+                    <span className="flex-1 text-sm font-medium text-cocoa">{c.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        set('colors', values.colors.filter((_, j) => j !== i));
+                        setColorFiles((prev) => {
+                          const next: Record<number, File> = {};
+                          Object.entries(prev).forEach(([k, v]) => {
+                            const ki = Number(k);
+                            if (ki !== i) next[ki > i ? ki - 1 : ki] = v;
+                          });
+                          return next;
+                        });
+                      }}
+                      className="text-xs text-brown hover:text-wine"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  {c.fileName && !colorFiles[i] ? (
+                    <p className="text-xs text-olive">Current: {c.fileName}</p>
+                  ) : null}
+                  {colorFiles[i] ? (
+                    <p className="text-xs text-olive">{colorFiles[i].name} ready to upload</p>
+                  ) : null}
+                  <input
+                    type="file"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) setColorFiles((prev) => ({ ...prev, [i]: f }));
+                    }}
+                    className="block w-full text-xs text-cocoa file:mr-2 file:rounded-full file:border-0 file:bg-sand-pale file:px-3 file:py-1 file:text-xs file:text-cocoa hover:file:bg-sand"
+                  />
                 </div>
               ))}
             </div>
           ) : null}
 
-          <div className="flex flex-wrap items-end gap-2">
-            <div>
-              <label className="label" htmlFor="colorHex">Colour</label>
-              <input
-                id="colorHex"
-                type="color"
-                value={newColor.hex}
-                onChange={(e) => setNewColor((c) => ({ ...c, hex: e.target.value }))}
-                className="h-9 w-14 cursor-pointer rounded-lg border border-sand bg-surface p-1"
-              />
+          <div className="rounded-xl border border-sand bg-sand-pale/40 p-4 space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-brown">New colour</p>
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <label className="label" htmlFor="colorHex">Colour 1</label>
+                <input
+                  id="colorHex"
+                  type="color"
+                  value={newColor.hex}
+                  onChange={(e) => setNewColor((c) => ({ ...c, hex: e.target.value }))}
+                  className="h-9 w-14 cursor-pointer rounded-lg border border-sand bg-surface p-1"
+                />
+              </div>
+              {newColor.useHex2 ? (
+                <div>
+                  <label className="label" htmlFor="colorHex2">Colour 2</label>
+                  <input
+                    id="colorHex2"
+                    type="color"
+                    value={newColor.hex2 || '#FFFFFF'}
+                    onChange={(e) => setNewColor((c) => ({ ...c, hex2: e.target.value }))}
+                    className="h-9 w-14 cursor-pointer rounded-lg border border-sand bg-surface p-1"
+                  />
+                </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setNewColor((c) => ({ ...c, useHex2: !c.useHex2, hex2: '' }))}
+                className="btn-ghost btn-sm mt-5"
+              >
+                {newColor.useHex2 ? '− Remove 2nd' : '+ 2nd colour'}
+              </button>
             </div>
-            <div className="flex-1 min-w-[120px]">
-              <label className="label" htmlFor="colorName">Name (e.g. Blush Rose)</label>
+
+            <div>
+              <label className="label" htmlFor="colorName">Colour name</label>
               <input
                 id="colorName"
                 className="input"
                 value={newColor.name}
                 onChange={(e) => setNewColor((c) => ({ ...c, name: e.target.value }))}
                 placeholder="Ivory, Black, Sage…"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    if (newColor.name.trim()) {
-                      set('colors', [...values.colors, { name: newColor.name.trim(), hex: newColor.hex }]);
-                      setNewColor({ name: '', hex: '#000000' });
-                    }
-                  }
-                }}
               />
             </div>
+
+            <div>
+              <label className="label">File for this colour</label>
+              <input
+                type="file"
+                ref={newColorFileRef}
+                className="block w-full text-sm text-cocoa file:mr-3 file:rounded-full file:border-0 file:bg-sand-pale file:px-4 file:py-2 file:text-sm file:text-cocoa hover:file:bg-sand"
+              />
+            </div>
+
             <button
               type="button"
               onClick={() => {
-                if (newColor.name.trim()) {
-                  set('colors', [...values.colors, { name: newColor.name.trim(), hex: newColor.hex }]);
-                  setNewColor({ name: '', hex: '#000000' });
-                }
+                if (!newColor.name.trim()) return;
+                const idx = values.colors.length;
+                set('colors', [
+                  ...values.colors,
+                  {
+                    name: newColor.name.trim(),
+                    hex: newColor.hex,
+                    ...(newColor.useHex2 && newColor.hex2 ? { hex2: newColor.hex2 } : {}),
+                  },
+                ]);
+                const f = newColorFileRef.current?.files?.[0];
+                if (f) setColorFiles((prev) => ({ ...prev, [idx]: f }));
+                setNewColor({ name: '', hex: '#B4A4D4', hex2: '', useHex2: false });
+                if (newColorFileRef.current) newColorFileRef.current.value = '';
               }}
               className="btn-ghost btn-sm"
             >

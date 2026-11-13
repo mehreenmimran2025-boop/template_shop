@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-type ColorOption = { name: string; hex: string };
+type ColorOption = { name: string; hex: string; hex2?: string; filePath?: string };
 
 type Props = {
   templateId: string;
@@ -70,6 +70,10 @@ export default function BuyPanel({
   }
 
   async function placeOrder() {
+    if (colors.length > 0 && !selectedColor) {
+      setError('Please pick a colour before placing your order.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -111,7 +115,11 @@ export default function BuyPanel({
                     ? 'border-wine scale-110 shadow-md'
                     : 'border-sand hover:border-brown')
                 }
-                style={{ background: c.hex }}
+                style={{
+                  background: c.hex2
+                    ? `linear-gradient(135deg, ${c.hex} 50%, ${c.hex2} 50%)`
+                    : c.hex,
+                }}
               />
             ))}
           </div>

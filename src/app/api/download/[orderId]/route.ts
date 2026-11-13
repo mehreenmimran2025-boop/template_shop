@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { isBlobUrl, templateFilePath } from '@/lib/storage';
+import { parseColors } from '@/lib/format';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,19 +30,30 @@ export async function GET(_req: Request, { params }: { params: { orderId: string
     );
   }
 
-  if (!order.template.filePath) {
-    return NextResponse.json({ error: 'The file is not attached to this template yet.' }, { status: 409 });
+  // If the buyer chose a colour, try to serve that colour's specific file.
+  let filePath = order.template.filePath;
+  let downloadName = order.template.fileName || order.template.slug;
+
+  if (order.colorChoice) {
+    const colors = parseColors(order.template.colors);
+    const chosen = colors.find((c) => c.name === order.colorChoice);
+    if (chosen?.filePath) {
+      filePath = chosen.filePath;
+      if (chosen.fileName) downloadName = chosen.fileName;
+    }
   }
 
-  const downloadName = order.template.fileName || order.template.slug;
+  if (!filePath) {
+    return NextResponse.json({ error: 'The file is not attached to this template yet.' }, { status: 409 });
+  }
 
   if (isOwner) {
     await prisma.download.create({ data: { orderId: order.id, userId: user.id } });
   }
 
   // Vercel Blob: fetch the file and pipe it through (blob URL stays hidden from buyer)
-  if (isBlobUrl(order.template.filePath)) {
-    const blobRes = await fetch(order.template.filePath);
+  if (isBlobUrl(filePath)) {
+    const blobRes = await fetch(filePath);
     if (!blobRes.ok) return NextResponse.json({ error: 'The file could not be retrieved.' }, { status: 502 });
     return new NextResponse(blobRes.body, {
       headers: {
@@ -57,7 +69,7 @@ export async function GET(_req: Request, { params }: { params: { orderId: string
   const { promises: fs } = await import('fs');
   const { Readable } = await import('stream');
 
-  const absolute = templateFilePath(order.template.filePath);
+  const absolute = templateFilePath(filePath);
   try { await fs.access(absolute); } catch {
     return NextResponse.json({ error: 'The file is missing on the server.' }, { status: 410 });
   }

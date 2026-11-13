@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { adminGuard, priceToCents } from '@/lib/admin';
 import { savePreview, saveTemplateFile } from '@/lib/storage';
-import { slugify } from '@/lib/format';
+import { slugify, parseColors } from '@/lib/format';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,8 +15,24 @@ export async function POST(req: Request) {
   const title = String(form.get('title') ?? '').trim();
   if (!title) return NextResponse.json({ error: 'A title is required.' }, { status: 400 });
 
+  // Parse color options early so we can check if per-color files cover the download requirement.
+  let colorOptions = parseColors(String(form.get('colors') ?? '[]'));
+
+  // Upload per-color files and attach filePath/fileName to each color option.
+  for (let i = 0; i < colorOptions.length; i++) {
+    const cf = form.get(`color_file_${i}`);
+    if (cf instanceof File && cf.size > 0) {
+      const stored = await saveTemplateFile(cf);
+      colorOptions[i] = { ...colorOptions[i], filePath: stored, fileName: cf.name };
+    }
+  }
+
+  const hasColorFiles = colorOptions.some((c) => c.filePath);
+
   const file = form.get('file');
-  if (!(file instanceof File) || file.size === 0) {
+  const hasMainFile = file instanceof File && file.size > 0;
+
+  if (!hasMainFile && !hasColorFiles) {
     return NextResponse.json({ error: 'Attach the file buyers will download.' }, { status: 400 });
   }
 
@@ -32,13 +48,16 @@ export async function POST(req: Request) {
     }
   }
 
-  const storedName = await saveTemplateFile(file);
+  let storedName = '';
+  let fileName = '';
+  let fileSize = 0;
+  if (hasMainFile && file instanceof File) {
+    storedName = await saveTemplateFile(file);
+    fileName = file.name;
+    fileSize = file.size;
+  }
 
-  let colors = '[]';
-  try {
-    const parsed = JSON.parse(String(form.get('colors') ?? '[]'));
-    if (Array.isArray(parsed)) colors = JSON.stringify(parsed);
-  } catch { /* leave as [] */ }
+  const colors = JSON.stringify(colorOptions);
 
   const template = await prisma.template.create({
     data: {
@@ -52,9 +71,9 @@ export async function POST(req: Request) {
       priceCents: priceToCents(String(form.get('price') ?? '0')),
       colors,
       previews: JSON.stringify(previews),
-      fileName: file.name,
+      fileName,
       filePath: storedName,
-      fileSize: file.size,
+      fileSize,
       published: form.get('published') === '1',
       featured: form.get('featured') === '1',
       sortOrder: Number(form.get('sortOrder') ?? 0) || 0,
