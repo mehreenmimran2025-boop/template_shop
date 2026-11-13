@@ -1,0 +1,7 @@
+node_modules
+.next
+data/*.db
+data/files
+public/uploads/previews/*
+!public/uploads/previews/.gitkeep
+.env

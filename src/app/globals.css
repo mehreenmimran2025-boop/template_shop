@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Colour tokens ──────────────────────────────────────────────────────── */
+:root {
+  /* R G B triplets — used as  rgb(var(--name) / opacity) by Tailwind */
+  --cream:        251 248 243;  /* #FBF8F3 — page bg          */
+  --surface:      255 255 255;  /* #FFFFFF — card / input bg  */
+  --sand:         205 191 152;  /* #CDBF98 — borders          */
+  --sand-light:   229 220 196;  /* #E5DCC4                    */
+  --sand-pale:    244 239 226;  /* #F4EFE2 — subtle bg        */
+  --brown:        136 105  69;  /* #886945 — muted text       */
+  --brown-light:  166 135  95;  /* #A6875F                    */
+  --cocoa:         83  59  38;  /* #533B26 — body text        */
+  --cocoa-deep:    59  42  27;  /* #3B2A1B                    */
+  --wine:          94  35  60;  /* #5E233C — primary accent   */
+  --wine-deep:     74  27  47;  /* #4A1B2F                    */
+  --wine-soft:    122  54  81;  /* #7A3651                    */
+  --mauve:        171 140 153;  /* #AB8C99                    */
+  --mauve-light:  199 176 186;  /* #C7B0BA                    */
+  --mauve-pale:   235 224 228;  /* #EBE0E4                    */
+  --olive:         82  88  68;  /* #525844                    */
+  --olive-light:  110 117  96;  /* #6E7560                    */
+  --olive-pale:   228 230 222;  /* #E4E6DE                    */
+  --ink:           46  32  25;  /* #2E2019 — darkest text     */
+}
+
+.dark {
+  --cream:        28  17  24;   /* #1C1118 — warm deep dark  */
+  --surface:      38  27  34;   /* #261B22 — card bg         */
+  --sand:         74  48  64;   /* #4A3040 — borders         */
+  --sand-light:   52  36  48;   /* #342430 — hover           */
+  --sand-pale:    31  21  32;   /* #1F1520 — subtle bg       */
+  --brown:       168 137 110;   /* #A8896E — muted text      */
+  --brown-light: 186 158 130;   /* #BA9E82                   */
+  --cocoa:       221 208 196;   /* #DDD0C4 — body text       */
+  --cocoa-deep:  237 226 214;   /* #EDE2D6 — strong text     */
+  --wine:        207 123 152;   /* #CF7B98 — soft rose       */
+  --wine-deep:   183  99 128;   /* #B76380                   */
+  --wine-soft:   225 149 175;   /* #E195AF                   */
+  --mauve:       154 112 128;   /* #9A7080                   */
+  --mauve-light: 130  92 110;   /* #825C6E                   */
+  --mauve-pale:   46  30  40;   /* #2E1E28                   */
+  --olive:       138 155 108;   /* #8A9B6C — sage            */
+  --olive-light: 156 173 126;   /* #9CAD7E                   */
+  --olive-pale:   30  36  24;   /* #1E2418                   */
+  --ink:         237 226 214;   /* #EDE2D6                   */
+}
+
+/* ─── Base ───────────────────────────────────────────────────────────────── */
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body { @apply bg-cream text-ink font-sans antialiased; }
+  h1, h2, h3, h4 { @apply font-display; }
+  ::selection { background: rgb(var(--sand)); color: rgb(var(--wine-deep)); }
+}
+
+/* ─── Components ─────────────────────────────────────────────────────────── */
+@layer components {
+  .container-x { @apply mx-auto w-full max-w-6xl px-5 sm:px-8; }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium
+           transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-55;
+  }
+  .btn-primary { @apply btn bg-wine text-sand-pale hover:bg-wine-deep hover:shadow-lift; }
+  .btn-olive   { @apply btn bg-olive text-sand-pale hover:bg-olive-light; }
+  .btn-ghost   { @apply btn border border-sand text-cocoa hover:border-brown hover:bg-sand-pale; }
+  .btn-danger  { @apply btn border border-wine/30 text-wine hover:bg-wine hover:text-sand-pale; }
+  .btn-sm      { @apply px-3.5 py-1.5 text-xs; }
+
+  .card { @apply rounded-xl2 border border-sand/70 bg-surface shadow-card; }
+
+  .label { @apply mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-brown; }
+  .input {
+    @apply w-full rounded-xl border border-sand bg-surface px-3.5 py-2.5 text-sm text-ink
+           placeholder:text-mauve focus:border-wine focus:outline-none focus:ring-2 focus:ring-wine/15;
+  }
+  .textarea { @apply input min-h-[110px] resize-y leading-relaxed; }
+
+  .badge { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide; }
+  .badge-pending   { @apply badge bg-sand-light text-cocoa; }
+  .badge-paid      { @apply badge bg-olive-pale text-olive; }
+  .badge-cancelled { @apply badge bg-mauve-pale text-wine; }
+
+  .eyebrow { @apply text-[11px] font-semibold uppercase tracking-[0.22em] text-brown; }
+  .link-underline { @apply underline decoration-sand decoration-2 underline-offset-4 hover:decoration-wine; }
+}

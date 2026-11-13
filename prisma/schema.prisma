@@ -1,0 +1,133 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("CUSTOMER") // CUSTOMER | ADMIN
+  blocked      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  orders    Order[]
+  downloads Download[]
+  wishlist  Wishlist[]
+}
+
+model Template {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  tagline     String   @default("")
+  description String   @default("")
+  includes    String   @default("") // one item per line
+  category    String   @default("General")
+  tags        String   @default("")
+  priceCents  Int      @default(0)
+  previews    String   @default("[]") // JSON array of public image paths
+  fileName    String   @default("")
+  filePath    String   @default("") // relative to data/files
+  fileSize    Int      @default(0)
+  colors      String   @default("[]") // JSON array of {name,hex}
+  published   Boolean  @default(false)
+  featured    Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orders   Order[]
+  wishedBy Wishlist[]
+}
+
+model Wishlist {
+  id         String   @id @default(cuid())
+  userId     String
+  templateId String
+  createdAt  DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, templateId])
+  @@index([userId])
+}
+
+model Order {
+  id         String    @id @default(cuid())
+  publicId   String    @unique
+  userId     String
+  templateId String
+  amountCents Int
+  status     String    @default("PENDING") // PENDING | PAID | CANCELLED
+  buyerNote   String    @default("")
+  adminNote   String    @default("")
+  colorChoice String    @default("")
+  createdAt   DateTime  @default(now())
+  paidAt     DateTime?
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template  Template   @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  downloads Download[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Download {
+  id        String   @id @default(cuid())
+  orderId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Settings {
+  id                  Int    @id @default(1)
+  storeName           String @default("Template Studio")
+  tagline             String @default("Beautiful, ready-to-use templates")
+  heroHeadline        String @default("Templates made to be used, not just admired")
+  heroSub             String @default("Simple templates you can use straight away. Buy once — it is yours to keep.")
+  aboutText           String @default("")
+  paymentInstructions String @default("Send the total using the details below, then message me your order number. I will confirm it as soon as it arrives.")
+  paymentDetails      String @default("Bank transfer / STC Pay\nAccount name: —\nIBAN: —")
+  contactEmail        String @default("")
+  whatsapp            String @default("")
+  instagram           String @default("")
+  currencySymbol      String @default("SAR")
+  baseCurrency        String @default("SAR")
+  baseCountry         String @default("SA")
+  defaultCountry      String @default("US")
+  inboxEmail          String @default("")
+  updatedAt           DateTime @updatedAt @default(now())
+}
+
+model ExchangeRate {
+  base      String
+  code      String
+  rate      Float
+  fetchedAt DateTime @default(now())
+
+  @@id([base, code])
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  body      String
+  page      String   @default("")
+  userId    String?
+  handled   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([handled])
+}
