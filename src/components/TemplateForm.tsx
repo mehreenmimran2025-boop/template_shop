@@ -4,6 +4,30 @@ import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+/** Upload a single file: direct-to-Blob in production, local multipart fallback in dev. */
+async function uploadFile(file: File): Promise<{ url: string; name: string; size: number }> {
+  // On Vercel: upload directly from browser to Vercel Blob (no 4.5 MB serverless limit)
+  if (process.env.NEXT_PUBLIC_VERCEL_ENV != null) {
+    const { upload } = await import('@vercel/blob/client');
+    const blob = await upload(file.name, file, {
+      access: 'public',
+      handleUploadUrl: '/api/admin/upload',
+    });
+    return { url: blob.url, name: file.name, size: file.size };
+  }
+  // Local dev: direct multipart (small files only, no Vercel limit locally)
+  const fd = new FormData();
+  fd.set('file', file);
+  const res = await fetch('/api/admin/upload', { method: 'POST', body: fd });
+  if (!res.ok) {
+    const t = await res.text();
+    let d: { error?: string } = {};
+    try { d = JSON.parse(t); } catch { /* */ }
+    throw new Error(d.error || 'Upload failed.');
+  }
+  return res.json();
+}
+
 export type ColorOption = { name: string; hex: string; hex2?: string; filePath?: string; fileName?: string };
 
 export type TemplateFormValues = {
@@ -87,6 +111,38 @@ export default function TemplateForm({
     }
 
     setBusy(true);
+
+    // Upload files directly to storage before the main form submission.
+    // This avoids Vercel's 4.5 MB serverless payload limit entirely.
+    let uploadedFileUrl = '';
+    let uploadedFileName = '';
+    let uploadedFileSize = 0;
+    if (newFile) {
+      try {
+        const up = await uploadFile(newFile);
+        uploadedFileUrl = up.url;
+        uploadedFileName = up.name;
+        uploadedFileSize = up.size;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'File upload failed.');
+        setBusy(false);
+        return;
+      }
+    }
+
+    // Build updated color options with uploaded file URLs baked in.
+    const colorOptionsWithUrls = await Promise.all(
+      values.colors.map(async (c, i) => {
+        if (!colorFiles[i]) return c;
+        try {
+          const up = await uploadFile(colorFiles[i]);
+          return { ...c, filePath: up.url, fileName: up.name };
+        } catch {
+          return c;
+        }
+      }),
+    );
+
     const body = new FormData();
     body.set('title', values.title);
     body.set('slug', values.slug || slugify(values.title));
@@ -99,21 +155,27 @@ export default function TemplateForm({
     body.set('published', values.published ? '1' : '0');
     body.set('featured', values.featured ? '1' : '0');
     body.set('sortOrder', String(values.sortOrder));
-    body.set('colors', JSON.stringify(values.colors));
-    values.colors.forEach((_, i) => {
-      if (colorFiles[i]) body.append(`color_file_${i}`, colorFiles[i]);
-    });
+    body.set('colors', JSON.stringify(colorOptionsWithUrls));
     body.set('keptPreviews', JSON.stringify(keptPreviews));
     newPreviews.forEach((file) => body.append('previews', file));
-    if (newFile) body.set('file', newFile);
+    if (uploadedFileUrl) {
+      body.set('fileUrl', uploadedFileUrl);
+      body.set('fileName', uploadedFileName);
+      body.set('fileSize', String(uploadedFileSize));
+    }
 
     try {
       const res = await fetch(isEdit ? '/api/admin/templates/' + initial!.id : '/api/admin/templates', {
         method: 'POST',
         body,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Could not save the template.');
+      const text = await res.text();
+      let data: { error?: string } = {};
+      try { data = JSON.parse(text); } catch { /* plain-text error from infra */ }
+      if (!res.ok) {
+        const msg = data.error || (text.length < 200 ? text : '') || 'Could not save the template.';
+        throw new Error(msg.includes('Entity Too Large') ? 'File too large — keep each file under 4 MB.' : msg);
+      }
       router.push('/admin/templates');
       router.refresh();
     } catch (err) {
@@ -328,7 +390,8 @@ export default function TemplateForm({
           ) : null}
 
           <div className="rounded-xl border border-sand bg-sand-pale/40 p-4 space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-brown">New colour</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-brown">Add a colour</p>
+            <p className="text-xs text-brown">Fill in the details below, then click <strong>Add colour</strong>. Repeat for each colour variant.</p>
             <div className="flex flex-wrap items-end gap-3">
               <div>
                 <label className="label" htmlFor="colorHex">Colour 1</label>

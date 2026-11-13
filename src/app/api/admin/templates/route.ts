@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { adminGuard, priceToCents } from '@/lib/admin';
-import { savePreview, saveTemplateFile } from '@/lib/storage';
+import { savePreview } from '@/lib/storage';
 import { slugify, parseColors } from '@/lib/format';
 
 export const runtime = 'nodejs';
@@ -15,22 +15,13 @@ export async function POST(req: Request) {
   const title = String(form.get('title') ?? '').trim();
   if (!title) return NextResponse.json({ error: 'A title is required.' }, { status: 400 });
 
-  // Parse color options early so we can check if per-color files cover the download requirement.
-  let colorOptions = parseColors(String(form.get('colors') ?? '[]'));
-
-  // Upload per-color files and attach filePath/fileName to each color option.
-  for (let i = 0; i < colorOptions.length; i++) {
-    const cf = form.get(`color_file_${i}`);
-    if (cf instanceof File && cf.size > 0) {
-      const stored = await saveTemplateFile(cf);
-      colorOptions[i] = { ...colorOptions[i], filePath: stored, fileName: cf.name };
-    }
-  }
-
+  // Color options arrive with filePath/fileName already set (uploaded client-side).
+  const colorOptions = parseColors(String(form.get('colors') ?? '[]'));
   const hasColorFiles = colorOptions.some((c) => c.filePath);
 
-  const file = form.get('file');
-  const hasMainFile = file instanceof File && file.size > 0;
+  // Main file: client pre-uploaded, so we receive a URL + metadata, not a raw File.
+  const fileUrl = String(form.get('fileUrl') ?? '').trim();
+  const hasMainFile = Boolean(fileUrl);
 
   if (!hasMainFile && !hasColorFiles) {
     return NextResponse.json({ error: 'Attach the file buyers will download.' }, { status: 400 });
@@ -48,14 +39,9 @@ export async function POST(req: Request) {
     }
   }
 
-  let storedName = '';
-  let fileName = '';
-  let fileSize = 0;
-  if (hasMainFile && file instanceof File) {
-    storedName = await saveTemplateFile(file);
-    fileName = file.name;
-    fileSize = file.size;
-  }
+  const storedName = fileUrl;
+  const fileName = String(form.get('fileName') ?? '').trim();
+  const fileSize = Number(form.get('fileSize') ?? 0) || 0;
 
   const colors = JSON.stringify(colorOptions);
 

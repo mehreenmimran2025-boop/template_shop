@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { adminGuard, priceToCents } from '@/lib/admin';
-import { deletePreview, deleteTemplateFile, savePreview, saveTemplateFile } from '@/lib/storage';
+import { deletePreview, deleteTemplateFile, savePreview } from '@/lib/storage';
 import { parsePreviews, parseColors, slugify } from '@/lib/format';
 
 export const runtime = 'nodejs';
@@ -46,34 +46,19 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   let filePath = template.filePath;
   let fileSize = template.fileSize;
 
-  const file = form.get('file');
-  if (file instanceof File && file.size > 0) {
-    const storedName = await saveTemplateFile(file);
+  const fileUrl = String(form.get('fileUrl') ?? '').trim();
+  if (fileUrl) {
     await deleteTemplateFile(template.filePath);
-    fileName = file.name;
-    filePath = storedName;
-    fileSize = file.size;
+    filePath = fileUrl;
+    fileName = String(form.get('fileName') ?? '').trim() || fileName;
+    fileSize = Number(form.get('fileSize') ?? 0) || fileSize;
   }
 
-  // Merge incoming color options with existing filePaths for colors that didn't get a new file.
+  // Color options arrive with filePath/fileName already set (uploaded client-side).
+  // Fall back to existing colors if none were submitted.
   let colorOptions = parseColors(String(form.get('colors') ?? ''));
   if (colorOptions.length === 0) {
     colorOptions = parseColors(template.colors);
-  } else {
-    const existing = parseColors(template.colors);
-    for (let i = 0; i < colorOptions.length; i++) {
-      const cf = form.get(`color_file_${i}`);
-      if (cf instanceof File && cf.size > 0) {
-        const stored = await saveTemplateFile(cf);
-        colorOptions[i] = { ...colorOptions[i], filePath: stored, fileName: cf.name };
-      } else {
-        // Preserve existing filePath by matching on name.
-        const match = existing.find((e) => e.name === colorOptions[i].name);
-        if (match?.filePath) {
-          colorOptions[i] = { ...colorOptions[i], filePath: match.filePath, fileName: match.fileName };
-        }
-      }
-    }
   }
   const colors = JSON.stringify(colorOptions);
 
